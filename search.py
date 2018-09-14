@@ -4,7 +4,7 @@
 # educational purposes provided that (1) you do not distribute or publish
 # solutions, (2) you retain this notice, and (3) you provide clear
 # attribution to the University of Illinois at Urbana-Champaign
-# 
+#
 # Created by Michael Abir (abir2@illinois.edu) on 08/28/2018
 
 """
@@ -26,12 +26,25 @@ def search(maze, searchMethod):
         "greedy": greedy(maze),
         "astar": astar(maze),
     }.get(searchMethod, [])
-   
+
 
 def bfs(maze):
     # TODO: Write your code here
     # return path, num_states_explored
-    return [], 0
+    # TODO: Write your code here
+    # return path, num_states_explored
+    queue = []
+    lis = []
+    dic = {}
+    queue.append(maze.getNeighbors(maze.getStart()[0], maze.getStart()[1])[0])
+
+    #while len(queue) > 0:
+    #    lis.append(queue.popleft())
+
+
+    #print(len(queue))
+    #print(maze.getDimensions()[0], maze.getDimensions()[1])
+    return [queue[0]], 0
 
 
 def dfs(maze):
