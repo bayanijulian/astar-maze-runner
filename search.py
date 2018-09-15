@@ -48,7 +48,7 @@ def bfs(maze):
                 visited.append(neighbor)
                 num_states_explored = num_states_explored + 1
                 parent[neighbor] = curr_coord
-        print(maze.isObjective(curr_coord[0], curr_coord[1]))
+        #print(maze.isObjective(curr_coord[0], curr_coord[1]))
     path = []
     while not (curr_coord == maze.getStart()):
         path.append(curr_coord)
@@ -76,7 +76,7 @@ def dfs(maze):
                 visited.append(neighbor)
                 num_states_explored = num_states_explored + 1
                 parent[neighbor] = curr_coord
-        print(maze.isObjective(curr_coord[0], curr_coord[1]))
+        #print(maze.isObjective(curr_coord[0], curr_coord[1]))
     path = []
     while not (curr_coord == maze.getStart()):
         path.append(curr_coord)
@@ -84,16 +84,90 @@ def dfs(maze):
     path.append(curr_coord)
     path.reverse()
     return path, num_states_explored
-    return [], 0
-
 
 def greedy(maze):
-    # TODO: Write your code here
-    # return path, num_states_explored
-    return [], 0
+    priroity_queue = []
+    visited = []
+    parent = {}
 
+    #assuming only one objective for now
+    objective = maze.getObjectives()[0]
+    curr_coord = maze.getStart()
+    distance = heuristic(curr_coord, objective)
+
+    #uses first part of tuple for priority, tuple is (number, tuple) 
+    priroity_queue.append((distance, curr_coord))
+
+    visited.append(curr_coord)
+    num_states_explored = 1
+    
+    while (len(priroity_queue) > 0) and not (maze.isObjective(curr_coord[0], curr_coord[1])):
+        priroity_queue.sort(reverse=True)
+        curr_coord = priroity_queue.pop()[1]
+
+        for neighbor in maze.getNeighbors(curr_coord[0], curr_coord[1]):
+            if neighbor not in visited:
+                distance = heuristic(neighbor, objective)
+                priroity_queue.append((distance, neighbor))
+                visited.append(neighbor)
+                num_states_explored = num_states_explored + 1
+                parent[neighbor] = curr_coord
+
+    #solution function
+    path = []
+    while not (curr_coord == maze.getStart()):
+        path.append(curr_coord)
+        curr_coord = parent[curr_coord]
+    
+    path.append(curr_coord)
+    path.reverse()
+    
+    return path, num_states_explored
 
 def astar(maze):
-    # TODO: Write your code here
-    # return path, num_states_explored
-    return [], 0
+    priroity_queue = []
+    visited = []
+    parent = {}
+    
+    #assuming only one objective for now
+    objective = maze.getObjectives()[0]
+    curr_coord = maze.getStart()
+    distance = heuristic(curr_coord, objective)
+
+    #uses first part of tuple for priority, tuple is (number, tuple) 
+    priroity_queue.append((distance, curr_coord))
+
+    visited.append(curr_coord)
+    num_states_explored = 1
+    
+    while (len(priroity_queue) > 0) and not (maze.isObjective(curr_coord[0], curr_coord[1])):
+        priroity_queue.sort(reverse=True)
+        curr_coord = priroity_queue.pop()[1]
+
+        for neighbor in maze.getNeighbors(curr_coord[0], curr_coord[1]):
+            if neighbor not in visited:
+                distance = heuristic(neighbor, objective)
+                cost = num_states_explored #since cost = 1 for each step, cost = num_states_explored
+
+                priroity_queue.append((distance + cost, neighbor))
+                visited.append(neighbor)
+
+                num_states_explored = num_states_explored + 1
+                parent[neighbor] = curr_coord
+
+    #solution function
+    path = []
+    while not (curr_coord == maze.getStart()):
+        path.append(curr_coord)
+        curr_coord = parent[curr_coord]
+    
+    path.append(curr_coord)
+    path.reverse()
+    
+    return path, num_states_explored
+
+def heuristic(curr_coord, objective):
+    delta_row = curr_coord[0] - objective[0]
+    delta_col = curr_coord[1] - objective[1]
+    manhattan_distance = abs(delta_row) + abs(delta_col)
+    return manhattan_distance
