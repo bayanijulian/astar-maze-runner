@@ -19,13 +19,13 @@ files and classes when code is run, so be careful to not modify anything else.
 # maze is a Maze object based on the maze from the file specified by input filename
 # searchMethod is the search method specified by --method flag (bfs,dfs,greedy,astar)
 
-def search(maze, searchMethod):
+def search(maze, searchMethod):    
     return {
-        "bfs": bfs(maze),
-        "dfs": dfs(maze),
-        "greedy": greedy(maze),
-        "astar": astar(maze),
-    }.get(searchMethod, [])
+        "bfs": bfs,
+        "dfs": dfs,
+        "greedy": greedy,
+        "astar": astar,
+    }.get(searchMethod)(maze)
 
 
 def bfs(maze):
