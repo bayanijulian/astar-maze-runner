@@ -6,7 +6,7 @@
 # attribution to the University of Illinois at Urbana-Champaign
 #
 # Created by Michael Abir (abir2@illinois.edu) on 08/28/2018
-
+import collections
 """
 This is the main entry point for MP1. You should only modify code
 within this file -- the unrevised staff files will be used for all other
@@ -34,22 +34,56 @@ def bfs(maze):
     # TODO: Write your code here
     # return path, num_states_explored
     queue = []
-    lis = []
-    dic = {}
-    queue.append(maze.getNeighbors(maze.getStart()[0], maze.getStart()[1])[0])
-
-    #while len(queue) > 0:
-    #    lis.append(queue.popleft())
-
-
-    #print(len(queue))
-    #print(maze.getDimensions()[0], maze.getDimensions()[1])
-    return [queue[0]], 0
+    visited = []
+    parent = {}
+    curr_coord = (maze.getStart()[0], maze.getStart()[1])
+    queue.append(curr_coord)
+    visited.append(curr_coord)
+    num_states_explored = 1
+    while (len(queue) > 0) and not (maze.isObjective(curr_coord[0], curr_coord[1])):
+        curr_coord = queue.pop(0)
+        for neighbor in maze.getNeighbors(curr_coord[0], curr_coord[1]):
+            if neighbor not in visited:
+                queue.append(neighbor)
+                visited.append(neighbor)
+                num_states_explored = num_states_explored + 1
+                parent[neighbor] = curr_coord
+        print(maze.isObjective(curr_coord[0], curr_coord[1]))
+    path = []
+    while not (curr_coord == maze.getStart()):
+        path.append(curr_coord)
+        curr_coord = parent[curr_coord]
+    path.append(curr_coord)
+    path.reverse()
+    return path, num_states_explored
 
 
 def dfs(maze):
     # TODO: Write your code here
     # return path, num_states_explored
+    stack = []
+    visited = []
+    parent = {}
+    curr_coord = (maze.getStart()[0], maze.getStart()[1])
+    stack.append(curr_coord)
+    visited.append(curr_coord)
+    num_states_explored = 1
+    while (len(stack) > 0) and not (maze.isObjective(curr_coord[0], curr_coord[1])):
+        curr_coord = stack.pop()
+        for neighbor in maze.getNeighbors(curr_coord[0], curr_coord[1]):
+            if neighbor not in visited:
+                stack.append(neighbor)
+                visited.append(neighbor)
+                num_states_explored = num_states_explored + 1
+                parent[neighbor] = curr_coord
+        print(maze.isObjective(curr_coord[0], curr_coord[1]))
+    path = []
+    while not (curr_coord == maze.getStart()):
+        path.append(curr_coord)
+        curr_coord = parent[curr_coord]
+    path.append(curr_coord)
+    path.reverse()
+    return path, num_states_explored
     return [], 0
 
 
