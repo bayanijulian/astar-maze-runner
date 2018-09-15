@@ -7,6 +7,7 @@
 #
 # Created by Michael Abir (abir2@illinois.edu) on 08/28/2018
 import collections
+import math
 """
 This is the main entry point for MP1. You should only modify code
 within this file -- the unrevised staff files will be used for all other
@@ -93,7 +94,7 @@ def greedy(maze):
     #assuming only one objective for now
     objective = maze.getObjectives()[0]
     curr_coord = maze.getStart()
-    distance = heuristic(curr_coord, objective)
+    distance = manhattan_dist(curr_coord, objective)
 
     #uses first part of tuple for priority, tuple is (number, tuple) 
     priroity_queue.append((distance, curr_coord))
@@ -107,8 +108,9 @@ def greedy(maze):
 
         for neighbor in maze.getNeighbors(curr_coord[0], curr_coord[1]):
             if neighbor not in visited:
-                distance = heuristic(neighbor, objective)
+                distance = manhattan_dist(neighbor, objective)
                 priroity_queue.append((distance, neighbor))
+
                 visited.append(neighbor)
                 num_states_explored = num_states_explored + 1
                 parent[neighbor] = curr_coord
@@ -125,49 +127,60 @@ def greedy(maze):
     return path, num_states_explored
 
 def astar(maze):
-    priroity_queue = []
-    visited = []
-    parent = {}
-    
-    #assuming only one objective for now
-    objective = maze.getObjectives()[0]
-    curr_coord = maze.getStart()
-    distance = heuristic(curr_coord, objective)
-
-    #uses first part of tuple for priority, tuple is (number, tuple) 
-    priroity_queue.append((distance, curr_coord))
-
-    visited.append(curr_coord)
-    num_states_explored = 1
-    
-    while (len(priroity_queue) > 0) and not (maze.isObjective(curr_coord[0], curr_coord[1])):
-        priroity_queue.sort(reverse=True)
-        curr_coord = priroity_queue.pop()[1]
-
-        for neighbor in maze.getNeighbors(curr_coord[0], curr_coord[1]):
-            if neighbor not in visited:
-                distance = heuristic(neighbor, objective)
-                cost = num_states_explored #since cost = 1 for each step, cost = num_states_explored
-
-                priroity_queue.append((distance + cost, neighbor))
-                visited.append(neighbor)
-
-                num_states_explored = num_states_explored + 1
-                parent[neighbor] = curr_coord
-
-    #solution function
     path = []
-    while not (curr_coord == maze.getStart()):
-        path.append(curr_coord)
-        curr_coord = parent[curr_coord]
-    
+    objectives = maze.getObjectives()
+    num_states_explored = 1
+    curr_coord = maze.getStart()
     path.append(curr_coord)
-    path.reverse()
-    
+
+    while len(objectives) > 0:
+        priroity_queue = []
+        visited = []
+        parent = {}
+        
+        cost = 0
+        objective = get_next_objective(curr_coord,objectives)
+        objectives.remove(objective)
+        distance = manhattan_dist(curr_coord, objective)
+
+        #uses first part of tuple for priority, tuple is (number, tuple) 
+        priroity_queue.append((distance, curr_coord))
+        visited.append(curr_coord)
+        start_coord = curr_coord
+        while (len(priroity_queue) > 0) and not (objective == curr_coord):
+            priroity_queue.sort(reverse=True)
+            curr_coord = priroity_queue.pop()[1]
+
+            for neighbor in maze.getNeighbors(curr_coord[0], curr_coord[1]):
+                if neighbor not in visited:
+                    distance = manhattan_dist(neighbor, objective)
+                    cost = cost + 1
+                    priroity_queue.append((distance + cost, neighbor))
+                    visited.append(neighbor)
+                    num_states_explored = num_states_explored + 1
+                    parent[neighbor] = curr_coord
+
+        #solution function
+        subpath = []
+        while not (curr_coord == start_coord):
+            subpath.append(curr_coord)
+            curr_coord = parent[curr_coord]
+        
+        subpath.reverse()
+        path = path + subpath
+        curr_coord = path[-1]#resets curr_coord
     return path, num_states_explored
 
-def heuristic(curr_coord, objective):
+def manhattan_dist(curr_coord, objective):
     delta_row = curr_coord[0] - objective[0]
     delta_col = curr_coord[1] - objective[1]
-    manhattan_distance = abs(delta_row) + abs(delta_col)
-    return manhattan_distance
+    dist = abs(delta_row) + abs(delta_col)
+    return dist
+
+def get_next_objective(curr_coord, objectives):
+    priroity_queue = []
+    for objective in objectives:
+        dist = manhattan_dist(curr_coord, objective)
+        priroity_queue.append((dist, objective))
+    priroity_queue.sort(reverse=True)
+    return priroity_queue.pop()[1]
