@@ -8,6 +8,8 @@
 # Created by Michael Abir (abir2@illinois.edu) on 08/28/2018
 import collections
 import math
+import itertools
+import copy
 """
 This is the main entry point for MP1. You should only modify code
 within this file -- the unrevised staff files will be used for all other
@@ -20,7 +22,7 @@ files and classes when code is run, so be careful to not modify anything else.
 # maze is a Maze object based on the maze from the file specified by input filename
 # searchMethod is the search method specified by --method flag (bfs,dfs,greedy,astar)
 
-def search(maze, searchMethod):    
+def search(maze, searchMethod):
     return {
         "bfs": bfs,
         "dfs": dfs,
@@ -126,13 +128,17 @@ def greedy(maze):
     
     return path, num_states_explored
 
-def astar(maze):
+def old(maze):
     path = []
     objectives = maze.getObjectives()
     num_states_explored = 1
     curr_coord = maze.getStart()
     path.append(curr_coord)
 
+    # perms = list(itertools.permutations(objectives,2))
+    # print((perms))
+
+    # return [], 0
     while len(objectives) > 0:
         priroity_queue = []
         visited = []
@@ -171,6 +177,69 @@ def astar(maze):
         curr_coord = path[-1]#resets curr_coord
     return path, num_states_explored
 
+
+def astar(maze):
+    frontier = []
+    explored = []
+    
+    initialState = State(maze.getStart(), set([]))
+    initialNode = Node(None, 0, initialState)
+    
+    frontier.append(initialNode)
+    currentNode = None
+    
+    objectives = set(maze.getObjectives())
+
+    while (len(frontier) > 0):
+        frontier.sort(reverse=True)
+        currentNode = frontier.pop()
+        explored.append(currentNode)
+        # print("now exploring new node with cost of {}".format(currentNode.cost))
+        # print("node's current pos is {}".format(currentNode.state.current))
+        # print("node's current objectives gotten is {}".format(currentNode.state.objectives))
+        # if not currentNode.parent is None:
+        #     print("this node came from {}".format(currentNode.parent.state.current))
+        #print(len(explored))
+        if(currentNode.isGoal(objectives)):
+            break
+
+        row = currentNode.state.current[0]
+        col = currentNode.state.current[1]
+        for neighbor in maze.getNeighbors(row, col):
+            node = currentNode.addChild(neighbor, maze, objectives)
+            if node not in explored and node not in frontier:
+                frontier.append(node)
+
+    #solution function
+    path = []
+    curr_coord = currentNode.state.current
+    # print("objectives")
+    # for obj in currentNode.state.objectives:
+    #     print(obj)
+    objectivesTraveledTo = set([])
+    while not (objectivesTraveledTo == objectives):
+        path.append(curr_coord)
+        if(maze.isObjective(curr_coord[0], curr_coord[1])):
+            objectivesTraveledTo.add(curr_coord)
+        currentNode = currentNode.parent
+        curr_coord = currentNode.state.current
+    path.append(curr_coord)
+    path.reverse()
+    # print("path")
+    # for coord in path:
+    #     print(coord)
+    return path, len(explored)
+
+def heuristic(curr_coord, objectives):
+    distances = []
+    distanceTotal = 0
+    for objective in objectives:
+        dist = manhattan_dist(curr_coord, objective)
+        distanceTotal += dist
+        distances.append(dist)
+    distances.sort(reverse=True)
+    return distanceTotal/len(objectives)
+
 def manhattan_dist(curr_coord, objective):
     delta_row = curr_coord[0] - objective[0]
     delta_col = curr_coord[1] - objective[1]
@@ -184,3 +253,53 @@ def get_next_objective(curr_coord, objectives):
         priroity_queue.append((dist, objective))
     priroity_queue.sort(reverse=True)
     return priroity_queue.pop()[1]
+
+class Node:
+    def __init__(self, parent, cost, state):
+        self.parent = parent
+        self.cost = cost
+        self.state = state
+
+    def addChild(self, newCoord, maze, objectives):
+        state = self.createState(newCoord, maze)
+        cost = self.cost + 1 + heuristic(newCoord, objectives)
+        node = Node(self, cost, state)
+        return node
+
+    def createState(self, newCoord, maze):
+        objectives = copy.deepcopy(self.state.objectives)
+        if maze.isObjective(newCoord[0], newCoord[1]):
+            objectives.add(newCoord)
+            #print("found objective")
+            #print(newCoord)
+        newState = State(newCoord, objectives)
+        return newState
+
+    def isGoal(self, objectives):
+        return self.state.isGoal(objectives)
+
+    def __lt__(self, other):
+        return self.cost < other.cost
+
+    def __eq__(self, other):
+        return self.state == other.state
+
+class State:
+    def __init__(self, current, objectives):
+        self.current = current
+        self.objectives = objectives
+
+    def __eq__(self, other):
+        if self.current == other.current:
+            if len(self.objectives) == len(other.objectives):
+                    if self.objectives == other.objectives:
+                        return True
+        return False
+
+    def isGoal(self, objectives):
+        if len(self.objectives) == len(objectives):
+            if self.objectives == objectives:
+                return True
+        return False
+        
+            
