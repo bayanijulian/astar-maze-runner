@@ -10,6 +10,7 @@ import collections
 import math
 import itertools
 import copy
+import heapq
 """
 This is the main entry point for MP1. You should only modify code
 within this file -- the unrevised staff files will be used for all other
@@ -180,20 +181,19 @@ def old(maze):
 
 def astar(maze):
     frontier = []
-    explored = []
+    explored = set([])
     
     initialState = State(maze.getStart(), set([]))
     initialNode = Node(None, 0, initialState)
     
-    frontier.append(initialNode)
+    heapq.heappush(frontier, initialNode)
     currentNode = None
     
     objectives = set(maze.getObjectives())
 
     while (len(frontier) > 0):
-        frontier.sort(reverse=True)
-        currentNode = frontier.pop()
-        explored.append(currentNode)
+        currentNode = heapq.heappop(frontier)
+        explored.add(currentNode)
         # print("now exploring new node with cost of {}".format(currentNode.cost))
         # print("node's current pos is {}".format(currentNode.state.current))
         # print("node's current objectives gotten is {}".format(currentNode.state.objectives))
@@ -208,7 +208,7 @@ def astar(maze):
         for neighbor in maze.getNeighbors(row, col):
             node = currentNode.addChild(neighbor, maze, objectives)
             if node not in explored and node not in frontier:
-                frontier.append(node)
+                heapq.heappush(frontier, node)
 
     #solution function
     path = []
@@ -217,17 +217,18 @@ def astar(maze):
     # for obj in currentNode.state.objectives:
     #     print(obj)
     objectivesTraveledTo = set([])
-    while not (objectivesTraveledTo == objectives):
+    while not (currentNode.parent is None):
         path.append(curr_coord)
         if(maze.isObjective(curr_coord[0], curr_coord[1])):
             objectivesTraveledTo.add(curr_coord)
         currentNode = currentNode.parent
         curr_coord = currentNode.state.current
     path.append(curr_coord)
+            
     path.reverse()
-    # print("path")
-    # for coord in path:
-    #     print(coord)
+    print("path")
+    for coord in path:
+        print(coord)
     return path, len(explored)
 
 def heuristic(curr_coord, objectives):
@@ -238,7 +239,8 @@ def heuristic(curr_coord, objectives):
         distanceTotal += dist
         distances.append(dist)
     distances.sort(reverse=True)
-    return distanceTotal/len(objectives)
+    return distances.pop()
+    #return distanceTotal/len(objectives)
 
 def manhattan_dist(curr_coord, objective):
     delta_row = curr_coord[0] - objective[0]
@@ -283,11 +285,13 @@ class Node:
 
     def __eq__(self, other):
         return self.state == other.state
-
+    def __hash__(self):
+        return hash((self.state))
 class State:
     def __init__(self, current, objectives):
         self.current = current
         self.objectives = objectives
+        self.frozenobjectives = frozenset(objectives)
 
     def __eq__(self, other):
         if self.current == other.current:
@@ -301,5 +305,7 @@ class State:
             if self.objectives == objectives:
                 return True
         return False
+    def __hash__(self):
+        return hash((self.current, self.frozenobjectives))
         
             
