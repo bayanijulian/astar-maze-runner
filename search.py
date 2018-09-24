@@ -32,7 +32,6 @@ def search(maze, searchMethod):
         "astar": astar,
     }.get(searchMethod)(maze)
 
-
 def oldbfs(maze):
     # TODO: Write your code here
     # return path, num_states_explored
@@ -61,7 +60,6 @@ def oldbfs(maze):
     path.append(curr_coord)
     path.reverse()
     return path, num_states_explored
-
 
 def dfs(maze):
     # TODO: Write your code here
@@ -175,7 +173,11 @@ def astar(maze):
     currentNode = None
     
     objectives = set(maze.getObjectives())
+    
+    astarPathsLookUp = createPreCopmutedAstarPaths(maze)
+    print(astarPathsLookUp)
     mstLookUp = createPreComputedMST(objectives)
+    
     while (len(frontier) > 0):
         currentNode = heapq.heappop(frontier)
         explored.add(currentNode)
@@ -210,30 +212,22 @@ def astar(maze):
     print("total time took: {}".format(endTime-startTime))
     return solution(currentNode, maze, len(explored))
 
-### function takes in all the objectives and a state 
-### uses mstLookup based on state to estimate distance to all other goals
-### distance to nearest goal + distance to all other goals
-def heuristic(curr_coord, objectives, state, mstLookUp):
-    distances = []
+def createPreCopmutedAstarPaths(maze):
+    startTime = time.clock()
+    astarPathsLookUp = {}
     
-    visited = state.objectives
-    unvisited = objectives - visited
-    
-    for objective in unvisited:
-        dist = manhattan_dist(curr_coord, objective)
-        distances.append((dist, objective))
-    distances.sort(reverse=True)
-
-    if(len(unvisited)==1):
-        return distances.pop()[0]
-
-    if(len(distances) > 0):
-        mindist = distances.pop()
-        return mindist[0] + mstLookUp[frozenset(unvisited)]
-
-    return 0
-
-
+    objectives = maze.getObjectives()
+    objectives.append(maze.getStart())
+    print("objectives are {}".format(objectives))
+    for combo in combinations(objectives, 2):
+        start, end = combo
+        #path is from end -> start
+        path, cost = astarStartEnd(maze, start, end)
+        astarPathsLookUp[(end, start)] = (path, cost)
+        astarPathsLookUp[(start, end)] = (path.reverse(), cost)
+    endTime = time.clock()
+    print("total time took for astar paths is: {}".format(endTime-startTime))
+    return astarPathsLookUp
 ### function takes in all of the objectives
 ### creates every single possible combination and creates a MST
 ### stores this value in a dictionary to be looked up later in the heuristic
@@ -265,34 +259,61 @@ def createMST(vertices):
         addEdge(graph, edge[0], edge[1], weight)
     return KruskalMST(graph, len(vertices))
 
-def astarPreComp(maze, start, end):
+### function used just for one goal in astar
+### used to precompute all paths to every combination of goals
+### only returns paths from one direction end to start, and actual cost(should be just length)
+def astarStartEnd(maze, start, end):
     frontier = []
     explored = set([])
-    initialState = State(start, set([]))
-
-    initialNode = Node(None, 0, 0, initialState)
-    frontier.append(initialNode)
+    costLookUp = {}
+    
+    startNode = NodeOneGoal(None, 0, 0, start)
+    
+    costLookUp[startNode.state] = 0
+    heapq.heappush(frontier, startNode)
+    
     currentNode = None
     
-    objectives = set(end)
-    mstObj = copy.deepcopy(objectives)
-    mstLookupTable = createPreComputedMST(mstObj)
     while (len(frontier) > 0):
-        
-        currentNode = frontier.pop(0)
+        currentNode = heapq.heappop(frontier)
         explored.add(currentNode)
-        
-        if(currentNode.isGoal(objectives)):
+    
+        if(currentNode.isGoal(end)):
             break
 
-        row = currentNode.state.current[0]
-        col = currentNode.state.current[1]
+        row = currentNode.state[0]
+        col = currentNode.state[1]
         for neighbor in maze.getNeighbors(row, col):
-            node = currentNode.addChild(neighbor, maze, objectives, mstLookupTable)
+            node = currentNode.addChild(neighbor, maze, end)
             if node not in explored and node not in frontier:
-                frontier.append(node)
+                heapq.heappush(frontier, node)
+                costLookUp[node.state] = node.total_cost
+            else:
+                currentCost = node.total_cost
+                oldCost = costLookUp[node.state]
+                if(currentCost < oldCost):
+                    costLookUp[node.state] = currentCost
+                    if node in explored:
+                        explored.remove(node)
+                        frontier.append(node)
+                    else:
+                        frontier.append(node)
+    cost = currentNode.actual_cost
+    path = getPathOneGoal(currentNode)
+    return path, cost
 
-    return solution(currentNode, maze, len(explored))
+### only returns paths from one direction end to start
+def getPathOneGoal(goalNode):
+    currentNode = goalNode
+    path = []
+    curr_coord = currentNode.state
+    while not (currentNode.parent is None):
+        path.append(curr_coord)
+        currentNode = currentNode.parent
+        curr_coord = currentNode.state
+    path.append(curr_coord)
+    
+    return path
 
 def solution(goalNode, maze, statesExplored):
     currentNode = goalNode
@@ -312,6 +333,29 @@ def solution(goalNode, maze, statesExplored):
     # for coord in path:
     #     print(coord)
     return path, statesExplored
+
+### function takes in all the objectives and a state 
+### uses mstLookup based on state to estimate distance to all other goals
+### distance to nearest goal + distance to all other goals
+def heuristic(curr_coord, objectives, state, mstLookUp):
+    distances = []
+    
+    visited = state.objectives
+    unvisited = objectives - visited
+    
+    for objective in unvisited:
+        dist = manhattan_dist(curr_coord, objective)
+        distances.append((dist, objective))
+    distances.sort(reverse=True)
+
+    if(len(unvisited)==1):
+        return distances.pop()[0]
+
+    if(len(distances) > 0):
+        mindist = distances.pop()
+        return mindist[0] + mstLookUp[frozenset(unvisited)]
+
+    return 0
 
 def manhattan_dist(start, end):
     delta_row = start[0] - end[0]
@@ -374,6 +418,34 @@ class State:
 
     def __hash__(self):
         return hash((self.current, self.frozenobjectives))
+
+class NodeOneGoal:
+    def __init__(self, parent, actual_cost, total_cost, state):
+        self.parent = parent
+        self.total_cost = total_cost
+        self.actual_cost = actual_cost
+        self.state = state
+
+    def addChild(self, newCoord, maze, goal):
+        state = newCoord
+        actual_cost = self.actual_cost + 1
+        total_cost = actual_cost + manhattan_dist(newCoord, goal)
+        node = NodeOneGoal(self, actual_cost, total_cost, state)
+        return node
+
+    def isGoal(self, goal):
+        return self.state == goal
+
+    def __lt__(self, other):
+        if(self.total_cost == other.total_cost):
+            return self.actual_cost > other.actual_cost
+        return self.total_cost < other.total_cost
+
+    def __eq__(self, other):
+        return self.state == other.state
+
+    def __hash__(self):
+        return hash((self.state))
 
 from collections import defaultdict
 
