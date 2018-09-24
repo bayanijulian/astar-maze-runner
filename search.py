@@ -33,7 +33,7 @@ def search(maze, searchMethod):
         "astar": astar,
     }.get(searchMethod)(maze)
 
-def oldbfs(maze):
+def bfs(maze):
     queue = []
     visited = []
     parent = {}
@@ -83,72 +83,34 @@ def dfs(maze):
     return path, num_states_explored
 
 def greedy(maze):
-    priroity_queue = []
-    visited = []
-    parent = {}
-
-    #assuming only one objective for now
-    objective = maze.getObjectives()[0]
-    curr_coord = maze.getStart()
-    distance = manhattan_dist(curr_coord, objective)
-
-    #uses first part of tuple for priority, tuple is (number, tuple) 
-    priroity_queue.append((distance, curr_coord))
-
-    visited.append(curr_coord)
-    num_states_explored = 1
-    
-    while (len(priroity_queue) > 0) and not (maze.isObjective(curr_coord[0], curr_coord[1])):
-        priroity_queue.sort(reverse=True)
-        curr_coord = priroity_queue.pop()[1]
-
-        for neighbor in maze.getNeighbors(curr_coord[0], curr_coord[1]):
-            if neighbor not in visited:
-                distance = manhattan_dist(neighbor, objective)
-                priroity_queue.append((distance, neighbor))
-
-                visited.append(neighbor)
-                num_states_explored = num_states_explored + 1
-                parent[neighbor] = curr_coord
-
-    #solution function
-    path = []
-    while not (curr_coord == maze.getStart()):
-        path.append(curr_coord)
-        curr_coord = parent[curr_coord]
-    
-    path.append(curr_coord)
-    path.reverse()
-    
-    return path, num_states_explored
-
-def bfs(maze):
     frontier = []
     explored = set([])
-    initialState = State(maze.getStart(), set([]))
+    
+    # only gets one goal
+    start = maze.getStart()
+    goal = maze.getObjectives()[0]
 
-    initialNode = Node(None, 0, 0, initialState)
-    frontier.append(initialNode)
+    #parent, state, path_cost, estimated_cost, goal
+    startNode = NodeGreedy(None, start, 0, 0, goal)
+    heapq.heappush(frontier, startNode)
     currentNode = None
     
-    objectives = set(maze.getObjectives())
-    
     while (len(frontier) > 0):
-        
-        currentNode = frontier.pop(0)
+        currentNode = heapq.heappop(frontier)
         explored.add(currentNode)
-        
-        if(currentNode.isGoal(objectives)):
+    
+        if(currentNode.isGoal()):
             break
 
-        row = currentNode.state.current[0]
-        col = currentNode.state.current[1]
+        row = currentNode.state[0]
+        col = currentNode.state[1]
         for neighbor in maze.getNeighbors(row, col):
-            node = currentNode.addChild(neighbor, maze, objectives, mstLookupTable)
+            node = currentNode.addChild(neighbor)
             if node not in explored and node not in frontier:
-                frontier.append(node)
-
-    return solution(currentNode, maze, len(explored))
+                heapq.heappush(frontier, node)
+   
+    path = currentNode.get_solution()
+    return path, len(explored)
 
 def astar(maze):
     startTime = time.clock()
@@ -167,9 +129,10 @@ def astar(maze):
     
     objectives = set(maze.getObjectives())
     
-    astarPathLookUp = createPreCopmutedAstarPaths(maze)
+    astarPathLookUp = createPrecomputedAstarPaths(maze)
     mstLookUp = createPreComputedMST(objectives, astarPathLookUp)
-    
+    endTimePrecomp = time.clock()
+    print("total time took for precomputations: {}".format(endTimePrecomp-startTime))
     while (len(frontier) > 0):
         currentNode = heapq.heappop(frontier)
         explored.add(currentNode)
@@ -195,11 +158,11 @@ def astar(maze):
                     else:
                         frontier.append(node)
                         
-    endTime = time.clock()
-    print("total time took: {}".format(endTime-startTime))
+    endTimeTotal = time.clock()
+    print("total time to finish: {}".format(endTimeTotal-startTime))
     return solution(currentNode, maze, len(explored))
 
-def createPreCopmutedAstarPaths(maze):
+def createPrecomputedAstarPaths(maze):
     astarPathsLookUp = {}
     
     objectives = maze.getObjectives()
@@ -207,7 +170,7 @@ def createPreCopmutedAstarPaths(maze):
     
     for combo in combinations(objectives, 2):
         start, end = combo
-        cost = astarStartEnd(maze, start, end)
+        cost = astarPathCost(maze, start, end)
         
         astarPathsLookUp[(end, start)] = cost
         astarPathsLookUp[(start, end)] = cost
@@ -249,13 +212,13 @@ def createMST(vertices, weightsLookUp):
 
 ### function used just for one goal in astar
 ### used to precompute all paths to every combination of goals
-### only returns paths from one direction end to start, and actual cost(should be just length)
-def astarStartEnd(maze, start, end):
+### and actual cost(should be just length)
+def astarPathCost(maze, start, end):
     frontier = []
     explored = set([])
     costLookUp = {}
-    
-    startNode = NodeOneGoal(None, 0, 0, start)
+    # self, parent, state, path_cost, estimated_cost, goal
+    startNode = NodeAstar(None, start, 0, 0, end)
     
     costLookUp[startNode.state] = 0
     heapq.heappush(frontier, startNode)
@@ -266,13 +229,13 @@ def astarStartEnd(maze, start, end):
         currentNode = heapq.heappop(frontier)
         explored.add(currentNode)
     
-        if(currentNode.isGoal(end)):
+        if(currentNode.is_goal()):
             break
 
         row = currentNode.state[0]
         col = currentNode.state[1]
         for neighbor in maze.getNeighbors(row, col):
-            node = currentNode.addChild(neighbor, maze, end)
+            node = currentNode.add_child(neighbor)
             if node not in explored and node not in frontier:
                 heapq.heappush(frontier, node)
                 costLookUp[node.state] = node.total_cost
@@ -286,23 +249,9 @@ def astarStartEnd(maze, start, end):
                         frontier.append(node)
                     else:
                         frontier.append(node)
-    cost = currentNode.actual_cost
-   
-    #path = getPathOneGoal(currentNode)
-    return cost
-
-### only returns paths from one direction end to start
-def getPathOneGoal(goalNode):
-    currentNode = goalNode
-    path = []
-    curr_coord = currentNode.state
-    while not (currentNode.parent is None):
-        path.append(curr_coord)
-        currentNode = currentNode.parent
-        curr_coord = currentNode.state
-    path.append(curr_coord)
-     # path returned  is from end -> start
-    return path
+                        
+    path_cost = currentNode.path_cost
+    return path_cost
 
 def solution(goalNode, maze, statesExplored):
     currentNode = goalNode
@@ -330,7 +279,7 @@ def heuristic(curr_coord, objectives, state, mstLookUp):
     unvisited = objectives - visited
     
     for objective in unvisited:
-        dist = manhattan_dist(curr_coord, objective)
+        dist = manhattan_distance(curr_coord, objective)
         distances.append((dist, objective))
     distances.sort(reverse=True)
 
@@ -340,10 +289,9 @@ def heuristic(curr_coord, objectives, state, mstLookUp):
     if(len(distances) > 0):
         mindist = distances.pop()
         return mindist[0] + mstLookUp[frozenset(unvisited)]
-
     return 0
 
-def manhattan_dist(start, end):
+def manhattan_distance(start, end):
     delta_row = start[0] - end[0]
     delta_col = start[1] - end[1]
     distance = abs(delta_row) + abs(delta_col)
@@ -405,39 +353,11 @@ class State:
     def __hash__(self):
         return hash((self.current, self.frozenobjectives))
 
-class NodeOneGoal:
-    def __init__(self, parent, actual_cost, total_cost, state):
-        self.parent = parent
-        self.total_cost = total_cost
-        self.actual_cost = actual_cost
-        self.state = state
-
-    def addChild(self, newCoord, maze, goal):
-        state = newCoord
-        actual_cost = self.actual_cost + 1
-        total_cost = actual_cost + manhattan_dist(newCoord, goal)
-        node = NodeOneGoal(self, actual_cost, total_cost, state)
-        return node
-
-    def isGoal(self, goal):
-        return self.state == goal
-
-    def __lt__(self, other):
-        if(self.total_cost == other.total_cost):
-            return self.actual_cost > other.actual_cost
-        return self.total_cost < other.total_cost
-
-    def __eq__(self, other):
-        return self.state == other.state
-
-    def __hash__(self):
-        return hash((self.state))
-
 # includes path compressions
-def find(parent, i):
-    if parent[i] == i:
-        return i
-    return find(parent, parent[i])
+def find(parent, vertex):
+    if parent[vertex] == vertex:
+        return vertex
+    return find(parent, parent[vertex])
 
 # used to make sure there are no loops
 def union_by_rank(x, y, parent, rank):
@@ -453,29 +373,103 @@ def union_by_rank(x, y, parent, rank):
         rank[xroot] += 1
 
 def getKruskalMSTCost(graph, num_vertices):
-    result_mst = []
-    i = 0
-    edgeCount = 0
-
-    graph = sorted(graph,key=lambda item: item[2])
-    parent = [] ; rank = []
-
-    for node in range(num_vertices):
-        parent.append(node)
-        rank.append(0)
-    totalWeight = 0
     
-    while edgeCount < num_vertices - 1 :
+    graph = sorted(graph,key=lambda item: item[2])
+    parent = [] ; rank = [] # result_mst = []
 
-        u,v,w = graph[i]
-        i = i + 1
+    for x in range(num_vertices):
+        parent.append(x)
+        rank.append(0)
+
+    index = 0
+    edge_counter = 0
+    total_weight = 0
+
+    while edge_counter < num_vertices - 1 :
+
+        u,v,w = graph[index]
+        index += 1
         x = find(parent, u)
         y = find(parent ,v)
 
         if x != y:
-            edgeCount = edgeCount + 1
-            result_mst.append([u,v,w])
-            totalWeight += w
+            edge_counter += 1
+            # result_mst.append([u,v,w])
+            total_weight += w
             union_by_rank(x, y, parent, rank)
-    return totalWeight
-            
+
+    return total_weight
+
+class SimpleNode:
+    ### only works for start position to goal position
+    ### state is the current position as tuple (row, col)
+    ### path cost is path cost from start to this state
+    def __init__(self, parent, state, path_cost, goal):
+        self.parent = parent
+        self.state = state
+        self.goal = goal
+        self.path_cost = path_cost
+    
+    def is_goal(self):
+        return self.state == self.goal
+
+    def get_solution(self):
+        current_node = self
+        path = []
+        current_position = current_node.state
+        
+        # stops at start node which has parent set to None
+        while not (current_node.parent is None):
+            path.append(current_position)
+            current_node = current_node.parent
+            current_position = current_node.state
+        # appends the starts node position
+        path.append(current_position)
+        
+        path.reverse()
+        return path
+
+    def __eq__(self, other):
+        return self.state == other.state
+
+    def __hash__(self):
+        return hash(self.state)
+
+class NodeGreedy(SimpleNode):
+    ### only works for start position to goal position
+    ### state is the current position
+    ### cost is estimated cost from current position to goal
+    ### goal is objective position
+    def __init__(self, parent, state, path_cost, estimated_cost, goal):
+        SimpleNode.__init__(self, parent, state, path_cost, goal)
+        self.estimated_cost = estimated_cost
+        
+    def __lt__(self, other):
+        return self.estimated_cost < other.estimated_cost
+
+    def add_child(self, position):
+        estimated_cost = manhattan_distance(position, self.goal)
+        path_cost = self.path_cost + 1
+        node = NodeGreedy(self, position, path_cost, estimated_cost, self.goal)
+        return node
+
+class NodeAstar(NodeGreedy):
+    
+    ### actual cost is the cost it took from the start to this position
+    ### total cost is estimated cost from current position to goal + actual cost
+    ### goal is objective position
+    def __init__(self, parent, state, path_cost, estimated_cost, goal):
+        NodeGreedy.__init__(self, parent, state, path_cost, estimated_cost, goal)
+        self.total_cost = path_cost + estimated_cost
+
+    def add_child(self, postion):
+        state = postion
+        path_cost = self.path_cost + 1
+        estimated_cost = manhattan_distance(postion, self.goal)
+        node = NodeAstar(self, state, path_cost, estimated_cost, self.goal)
+        return node
+    
+    def __lt__(self, other):
+        if(self.total_cost == other.total_cost):
+            return self.path_cost > other.path_cost
+        return self.total_cost < other.total_cost
