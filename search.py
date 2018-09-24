@@ -8,9 +8,10 @@
 # Created by Michael Abir (abir2@illinois.edu) on 08/28/2018
 import collections
 import math
-import itertools
+from itertools import combinations
 import copy
 import heapq
+import time
 """
 This is the main entry point for MP1. You should only modify code
 within this file -- the unrevised staff files will be used for all other
@@ -32,7 +33,7 @@ def search(maze, searchMethod):
     }.get(searchMethod)(maze)
 
 
-def bfs(maze):
+def oldbfs(maze):
     # TODO: Write your code here
     # return path, num_states_explored
     # TODO: Write your code here
@@ -129,68 +130,52 @@ def greedy(maze):
     
     return path, num_states_explored
 
-def old(maze):
-    path = []
-    objectives = maze.getObjectives()
-    num_states_explored = 1
-    curr_coord = maze.getStart()
-    path.append(curr_coord)
-
-    # perms = list(itertools.permutations(objectives,2))
-    # print((perms))
-
-    # return [], 0
-    while len(objectives) > 0:
-        priroity_queue = []
-        visited = []
-        parent = {}
-        
-        cost = 0
-        objective = get_next_objective(curr_coord,objectives)
-        objectives.remove(objective)
-        distance = manhattan_dist(curr_coord, objective)
-
-        #uses first part of tuple for priority, tuple is (number, tuple) 
-        priroity_queue.append((distance, curr_coord))
-        visited.append(curr_coord)
-        start_coord = curr_coord
-        while (len(priroity_queue) > 0) and not (objective == curr_coord):
-            priroity_queue.sort(reverse=True)
-            curr_coord = priroity_queue.pop()[1]
-
-            for neighbor in maze.getNeighbors(curr_coord[0], curr_coord[1]):
-                if neighbor not in visited:
-                    distance = manhattan_dist(neighbor, objective)
-                    cost = cost + 1
-                    priroity_queue.append((distance + cost, neighbor))
-                    visited.append(neighbor)
-                    num_states_explored = num_states_explored + 1
-                    parent[neighbor] = curr_coord
-
-        #solution function
-        subpath = []
-        while not (curr_coord == start_coord):
-            subpath.append(curr_coord)
-            curr_coord = parent[curr_coord]
-        
-        subpath.reverse()
-        path = path + subpath
-        curr_coord = path[-1]#resets curr_coord
-    return path, num_states_explored
-
-
-def astar(maze):
+def bfs(maze):
     frontier = []
     explored = set([])
-    
     initialState = State(maze.getStart(), set([]))
-    initialNode = Node(None, 0, initialState)
-    
-    heapq.heappush(frontier, initialNode)
+
+    initialNode = Node(None, 0, 0, initialState)
+    frontier.append(initialNode)
     currentNode = None
     
     objectives = set(maze.getObjectives())
+    mstObj = copy.deepcopy(objectives)
+    mstLookupTable = createPreComputedMST(mstObj)
+    while (len(frontier) > 0):
+        
+        currentNode = frontier.pop(0)
+        explored.add(currentNode)
+        
+        if(currentNode.isGoal(objectives)):
+            break
 
+        row = currentNode.state.current[0]
+        col = currentNode.state.current[1]
+        for neighbor in maze.getNeighbors(row, col):
+            node = currentNode.addChild(neighbor, maze, objectives, mstLookupTable)
+            if node not in explored and node not in frontier:
+                frontier.append(node)
+
+    return solution(currentNode, maze, len(explored))
+
+def astar(maze):
+    startTime = time.clock()
+    
+    frontier = []
+    explored = set([])
+    costLookUp = {}
+    
+    initialState = State(maze.getStart(), set([]))
+    initialNode = Node(None, 0, 0, initialState)
+    
+    costLookUp[initialState] = 0
+    heapq.heappush(frontier, initialNode)
+    
+    currentNode = None
+    
+    objectives = set(maze.getObjectives())
+    mstLookUp = createPreComputedMST(objectives)
     while (len(frontier) > 0):
         currentNode = heapq.heappop(frontier)
         explored.add(currentNode)
@@ -199,23 +184,120 @@ def astar(maze):
         # print("node's current objectives gotten is {}".format(currentNode.state.objectives))
         # if not currentNode.parent is None:
         #     print("this node came from {}".format(currentNode.parent.state.current))
-        #print(len(explored))
+        # print(len(explored))
         if(currentNode.isGoal(objectives)):
             break
 
         row = currentNode.state.current[0]
         col = currentNode.state.current[1]
         for neighbor in maze.getNeighbors(row, col):
-            node = currentNode.addChild(neighbor, maze, objectives)
+            node = currentNode.addChild(neighbor, maze, objectives, mstLookUp)
             if node not in explored and node not in frontier:
                 heapq.heappush(frontier, node)
+                costLookUp[node.state] = node.total_cost
+            else:
+                currentCost = node.total_cost
+                oldCost = costLookUp[node.state]
+                if(currentCost < oldCost):
+                    costLookUp[node.state] = currentCost
+                    if node in explored:
+                        explored.remove(node)
+                        frontier.append(node)
+                    else:
+                        frontier.append(node)
+                        
+    endTime = time.clock()
+    print("total time took: {}".format(endTime-startTime))
+    return solution(currentNode, maze, len(explored))
 
-    #solution function
+### function takes in all the objectives and a state 
+### uses mstLookup based on state to estimate distance to all other goals
+### distance to nearest goal + distance to all other goals
+def heuristic(curr_coord, objectives, state, mstLookUp):
+    distances = []
+    
+    visited = state.objectives
+    unvisited = objectives - visited
+    
+    for objective in unvisited:
+        dist = manhattan_dist(curr_coord, objective)
+        distances.append((dist, objective))
+    distances.sort(reverse=True)
+
+    if(len(unvisited)==1):
+        return distances.pop()[0]
+
+    if(len(distances) > 0):
+        mindist = distances.pop()
+        return mindist[0] + mstLookUp[frozenset(unvisited)]
+
+    return 0
+
+
+### function takes in all of the objectives
+### creates every single possible combination and creates a MST
+### stores this value in a dictionary to be looked up later in the heuristic
+def createPreComputedMST(objectives):
+    results = {}
+    for x in range(len(objectives)):
+        for combo in combinations(objectives,x+1):
+            mstValue = createMST(combo)
+            key = frozenset(copy.deepcopy(combo))
+            results[key] = mstValue
+    return results
+
+## function takes in a set of vertices converts to a list
+## creates a list of indices that corresponds to the index of a vertex in the list
+## only did list of indices to work with Kruskal's MST
+def createMST(vertices):
+    graph = []
+    vertexList = list(vertices)
+    indexes = []
+
+    for x in range(len(vertices)):
+        indexes.append(x)
+    edges = list(combinations(indexes, 2))
+    
+    for edge in edges:
+        vertexA = vertexList[edge[0]]
+        vertexB = vertexList[edge[1]]
+        weight = manhattan_dist(vertexA, vertexB)
+        addEdge(graph, edge[0], edge[1], weight)
+    return KruskalMST(graph, len(vertices))
+
+def astarPreComp(maze, start, end):
+    frontier = []
+    explored = set([])
+    initialState = State(start, set([]))
+
+    initialNode = Node(None, 0, 0, initialState)
+    frontier.append(initialNode)
+    currentNode = None
+    
+    objectives = set(end)
+    mstObj = copy.deepcopy(objectives)
+    mstLookupTable = createPreComputedMST(mstObj)
+    while (len(frontier) > 0):
+        
+        currentNode = frontier.pop(0)
+        explored.add(currentNode)
+        
+        if(currentNode.isGoal(objectives)):
+            break
+
+        row = currentNode.state.current[0]
+        col = currentNode.state.current[1]
+        for neighbor in maze.getNeighbors(row, col):
+            node = currentNode.addChild(neighbor, maze, objectives, mstLookupTable)
+            if node not in explored and node not in frontier:
+                frontier.append(node)
+
+    return solution(currentNode, maze, len(explored))
+
+def solution(goalNode, maze, statesExplored):
+    currentNode = goalNode
     path = []
     curr_coord = currentNode.state.current
-    # print("objectives")
-    # for obj in currentNode.state.objectives:
-    #     print(obj)
     objectivesTraveledTo = set([])
     while not (currentNode.parent is None):
         path.append(curr_coord)
@@ -226,54 +308,35 @@ def astar(maze):
     path.append(curr_coord)
             
     path.reverse()
-    print("path")
-    for coord in path:
-        print(coord)
-    return path, len(explored)
+    # print("path")
+    # for coord in path:
+    #     print(coord)
+    return path, statesExplored
 
-def heuristic(curr_coord, objectives):
-    distances = []
-    distanceTotal = 0
-    for objective in objectives:
-        dist = manhattan_dist(curr_coord, objective)
-        distanceTotal += dist
-        distances.append(dist)
-    distances.sort(reverse=True)
-    return distances.pop()
-    #return distanceTotal/len(objectives)
-
-def manhattan_dist(curr_coord, objective):
-    delta_row = curr_coord[0] - objective[0]
-    delta_col = curr_coord[1] - objective[1]
-    dist = abs(delta_row) + abs(delta_col)
-    return dist
-
-def get_next_objective(curr_coord, objectives):
-    priroity_queue = []
-    for objective in objectives:
-        dist = manhattan_dist(curr_coord, objective)
-        priroity_queue.append((dist, objective))
-    priroity_queue.sort(reverse=True)
-    return priroity_queue.pop()[1]
+def manhattan_dist(start, end):
+    delta_row = start[0] - end[0]
+    delta_col = start[1] - end[1]
+    distance = abs(delta_row) + abs(delta_col)
+    return distance
 
 class Node:
-    def __init__(self, parent, cost, state):
+    def __init__(self, parent, actual_cost, total_cost, state):
         self.parent = parent
-        self.cost = cost
+        self.total_cost = total_cost
+        self.actual_cost = actual_cost
         self.state = state
 
-    def addChild(self, newCoord, maze, objectives):
+    def addChild(self, newCoord, maze, objectives, mstLookupTable):
         state = self.createState(newCoord, maze)
-        cost = self.cost + 1 + heuristic(newCoord, objectives)
-        node = Node(self, cost, state)
+        actual_cost = self.actual_cost + 1
+        total_cost = actual_cost + heuristic(newCoord, objectives, state, mstLookupTable)
+        node = Node(self, actual_cost, total_cost, state)
         return node
 
     def createState(self, newCoord, maze):
         objectives = copy.deepcopy(self.state.objectives)
         if maze.isObjective(newCoord[0], newCoord[1]):
             objectives.add(newCoord)
-            #print("found objective")
-            #print(newCoord)
         newState = State(newCoord, objectives)
         return newState
 
@@ -281,12 +344,16 @@ class Node:
         return self.state.isGoal(objectives)
 
     def __lt__(self, other):
-        return self.cost < other.cost
+        if(self.total_cost == other.total_cost):
+            return self.actual_cost > other.actual_cost
+        return self.total_cost < other.total_cost
 
     def __eq__(self, other):
         return self.state == other.state
+
     def __hash__(self):
         return hash((self.state))
+
 class State:
     def __init__(self, current, objectives):
         self.current = current
@@ -301,11 +368,62 @@ class State:
         return False
 
     def isGoal(self, objectives):
-        if len(self.objectives) == len(objectives):
-            if self.objectives == objectives:
-                return True
+        if self.objectives == objectives:
+            return True
         return False
+
     def __hash__(self):
         return hash((self.current, self.frozenobjectives))
+
+from collections import defaultdict
+
+def addEdge(graph,u,v,w):
+    graph.append([u,v,w])
+
+# includes path compressions
+def find(parent, i):
+    if parent[i] == i:
+        return i
+    return find(parent, parent[i])
+
+def union_by_rank(x, y, parent, rank):
+    xroot = find(parent, x)
+    yroot = find(parent, y)
+
+    if rank[xroot] < rank[yroot]:
+        parent[xroot] = yroot
+    elif rank[xroot] > rank[yroot]:
+        parent[yroot] = xroot
+    else :
+        parent[yroot] = xroot
+        rank[xroot] += 1
+
+def KruskalMST(graph, num_vertices):
+    result_mst = []
+    i = 0
+    edgeCount = 0
+
+    graph = sorted(graph,key=lambda item: item[2])
+    parent = [] ; rank = []
+
+    for node in range(num_vertices):
+        parent.append(node)
+        rank.append(0)
+    totalWeight = 0
+
+    while edgeCount < num_vertices - 1 :
+
+        u,v,w = graph[i]
+        i = i + 1
+        x = find(parent, u)
+        y = find(parent ,v)
+
+        if x != y:
+            edgeCount = edgeCount + 1
+            result_mst.append([u,v,w])
+            totalWeight += w
+            union_by_rank(x, y, parent, rank)
+    return totalWeight
+        
         
             
