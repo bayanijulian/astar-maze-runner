@@ -12,6 +12,7 @@ from itertools import combinations
 import copy
 import heapq
 import time
+from collections import defaultdict
 """
 This is the main entry point for MP1. You should only modify code
 within this file -- the unrevised staff files will be used for all other
@@ -33,10 +34,6 @@ def search(maze, searchMethod):
     }.get(searchMethod)(maze)
 
 def oldbfs(maze):
-    # TODO: Write your code here
-    # return path, num_states_explored
-    # TODO: Write your code here
-    # return path, num_states_explored
     queue = []
     visited = []
     parent = {}
@@ -62,8 +59,6 @@ def oldbfs(maze):
     return path, num_states_explored
 
 def dfs(maze):
-    # TODO: Write your code here
-    # return path, num_states_explored
     stack = []
     visited = []
     parent = {}
@@ -79,7 +74,6 @@ def dfs(maze):
                 visited.append(neighbor)
                 num_states_explored = num_states_explored + 1
                 parent[neighbor] = curr_coord
-        #print(maze.isObjective(curr_coord[0], curr_coord[1]))
     path = []
     while not (curr_coord == maze.getStart()):
         path.append(curr_coord)
@@ -138,8 +132,7 @@ def bfs(maze):
     currentNode = None
     
     objectives = set(maze.getObjectives())
-    mstObj = copy.deepcopy(objectives)
-    mstLookupTable = createPreComputedMST(mstObj)
+    
     while (len(frontier) > 0):
         
         currentNode = frontier.pop(0)
@@ -174,19 +167,13 @@ def astar(maze):
     
     objectives = set(maze.getObjectives())
     
-    astarPathsLookUp = createPreCopmutedAstarPaths(maze)
-    print(astarPathsLookUp)
-    mstLookUp = createPreComputedMST(objectives)
+    astarPathLookUp = createPreCopmutedAstarPaths(maze)
+    mstLookUp = createPreComputedMST(objectives, astarPathLookUp)
     
     while (len(frontier) > 0):
         currentNode = heapq.heappop(frontier)
         explored.add(currentNode)
-        # print("now exploring new node with cost of {}".format(currentNode.cost))
-        # print("node's current pos is {}".format(currentNode.state.current))
-        # print("node's current objectives gotten is {}".format(currentNode.state.objectives))
-        # if not currentNode.parent is None:
-        #     print("this node came from {}".format(currentNode.parent.state.current))
-        # print(len(explored))
+        
         if(currentNode.isGoal(objectives)):
             break
 
@@ -213,37 +200,36 @@ def astar(maze):
     return solution(currentNode, maze, len(explored))
 
 def createPreCopmutedAstarPaths(maze):
-    startTime = time.clock()
     astarPathsLookUp = {}
     
     objectives = maze.getObjectives()
     objectives.append(maze.getStart())
-    print("objectives are {}".format(objectives))
+    
     for combo in combinations(objectives, 2):
         start, end = combo
-        #path is from end -> start
-        path, cost = astarStartEnd(maze, start, end)
-        astarPathsLookUp[(end, start)] = (path, cost)
-        astarPathsLookUp[(start, end)] = (path.reverse(), cost)
-    endTime = time.clock()
-    print("total time took for astar paths is: {}".format(endTime-startTime))
+        cost = astarStartEnd(maze, start, end)
+        
+        astarPathsLookUp[(end, start)] = cost
+        astarPathsLookUp[(start, end)] = cost
+    
     return astarPathsLookUp
+
 ### function takes in all of the objectives
 ### creates every single possible combination and creates a MST
 ### stores this value in a dictionary to be looked up later in the heuristic
-def createPreComputedMST(objectives):
+def createPreComputedMST(objectives, astarLookUp):
     results = {}
     for x in range(len(objectives)):
         for combo in combinations(objectives,x+1):
-            mstValue = createMST(combo)
+            mstValue = createMST(combo, astarLookUp)
             key = frozenset(copy.deepcopy(combo))
             results[key] = mstValue
     return results
 
 ## function takes in a set of vertices converts to a list
 ## creates a list of indices that corresponds to the index of a vertex in the list
-## only did list of indices to work with Kruskal's MST
-def createMST(vertices):
+## only did list of indices to work with Kruskal's MST, where the indices is what makes the graph
+def createMST(vertices, weightsLookUp):
     graph = []
     vertexList = list(vertices)
     indexes = []
@@ -255,9 +241,11 @@ def createMST(vertices):
     for edge in edges:
         vertexA = vertexList[edge[0]]
         vertexB = vertexList[edge[1]]
-        weight = manhattan_dist(vertexA, vertexB)
-        addEdge(graph, edge[0], edge[1], weight)
-    return KruskalMST(graph, len(vertices))
+        #weight = manhattan_dist(vertexA, vertexB)
+        weight = weightsLookUp[(vertexA, vertexB)]
+        graph.append([edge[0],edge[1],weight])
+
+    return getKruskalMSTCost(graph, len(vertices))
 
 ### function used just for one goal in astar
 ### used to precompute all paths to every combination of goals
@@ -299,8 +287,9 @@ def astarStartEnd(maze, start, end):
                     else:
                         frontier.append(node)
     cost = currentNode.actual_cost
-    path = getPathOneGoal(currentNode)
-    return path, cost
+   
+    #path = getPathOneGoal(currentNode)
+    return cost
 
 ### only returns paths from one direction end to start
 def getPathOneGoal(goalNode):
@@ -312,7 +301,7 @@ def getPathOneGoal(goalNode):
         currentNode = currentNode.parent
         curr_coord = currentNode.state
     path.append(curr_coord)
-    
+     # path returned  is from end -> start
     return path
 
 def solution(goalNode, maze, statesExplored):
@@ -329,9 +318,6 @@ def solution(goalNode, maze, statesExplored):
     path.append(curr_coord)
             
     path.reverse()
-    # print("path")
-    # for coord in path:
-    #     print(coord)
     return path, statesExplored
 
 ### function takes in all the objectives and a state 
@@ -447,17 +433,13 @@ class NodeOneGoal:
     def __hash__(self):
         return hash((self.state))
 
-from collections import defaultdict
-
-def addEdge(graph,u,v,w):
-    graph.append([u,v,w])
-
 # includes path compressions
 def find(parent, i):
     if parent[i] == i:
         return i
     return find(parent, parent[i])
 
+# used to make sure there are no loops
 def union_by_rank(x, y, parent, rank):
     xroot = find(parent, x)
     yroot = find(parent, y)
@@ -470,7 +452,7 @@ def union_by_rank(x, y, parent, rank):
         parent[yroot] = xroot
         rank[xroot] += 1
 
-def KruskalMST(graph, num_vertices):
+def getKruskalMSTCost(graph, num_vertices):
     result_mst = []
     i = 0
     edgeCount = 0
@@ -482,7 +464,7 @@ def KruskalMST(graph, num_vertices):
         parent.append(node)
         rank.append(0)
     totalWeight = 0
-
+    
     while edgeCount < num_vertices - 1 :
 
         u,v,w = graph[i]
@@ -496,6 +478,4 @@ def KruskalMST(graph, num_vertices):
             totalWeight += w
             union_by_rank(x, y, parent, rank)
     return totalWeight
-        
-        
             
