@@ -31,6 +31,7 @@ def search(maze, searchMethod):
         "dfs": dfs,
         "greedy": greedy,
         "astar": astar,
+        "astarEC": astarEC
     }.get(searchMethod)(maze)
 
 def bfs(maze):
@@ -99,13 +100,13 @@ def greedy(maze):
         currentNode = heapq.heappop(frontier)
         explored.add(currentNode)
     
-        if(currentNode.isGoal()):
+        if(currentNode.is_goal()):
             break
 
         row = currentNode.state[0]
         col = currentNode.state[1]
         for neighbor in maze.getNeighbors(row, col):
-            node = currentNode.addChild(neighbor)
+            node = currentNode.add_child(neighbor)
             if node not in explored and node not in frontier:
                 heapq.heappush(frontier, node)
    
@@ -113,8 +114,6 @@ def greedy(maze):
     return path, len(explored)
 
 def astar(maze):
-    startTime = time.clock()
-    
     frontier = []
     explored = set([])
     costLookUp = {}
@@ -131,8 +130,7 @@ def astar(maze):
     
     astarPathLookUp = createPrecomputedAstarPaths(maze)
     mstLookUp = createPreComputedMST(objectives, astarPathLookUp)
-    endTimePrecomp = time.clock()
-    print("total time took for precomputations: {}".format(endTimePrecomp-startTime))
+    
     while (len(frontier) > 0):
         currentNode = heapq.heappop(frontier)
         explored.add(currentNode)
@@ -148,6 +146,7 @@ def astar(maze):
                 heapq.heappush(frontier, node)
                 costLookUp[node.state] = node.total_cost
             else:
+                # adds state back in again this new path was cheaper
                 currentCost = node.total_cost
                 oldCost = costLookUp[node.state]
                 if(currentCost < oldCost):
@@ -158,8 +157,6 @@ def astar(maze):
                     else:
                         frontier.append(node)
                         
-    endTimeTotal = time.clock()
-    print("total time to finish: {}".format(endTimeTotal-startTime))
     return solution(currentNode, maze, len(explored))
 
 def createPrecomputedAstarPaths(maze):
@@ -171,7 +168,7 @@ def createPrecomputedAstarPaths(maze):
     for combo in combinations(objectives, 2):
         start, end = combo
         cost = astarPathCost(maze, start, end)
-        
+        # adds in both permutations for easy look up
         astarPathsLookUp[(end, start)] = cost
         astarPathsLookUp[(start, end)] = cost
     
@@ -240,6 +237,7 @@ def astarPathCost(maze, start, end):
                 heapq.heappush(frontier, node)
                 costLookUp[node.state] = node.total_cost
             else:
+               # adds state back in again this new path was cheaper
                 currentCost = node.total_cost
                 oldCost = costLookUp[node.state]
                 if(currentCost < oldCost):
@@ -249,7 +247,7 @@ def astarPathCost(maze, start, end):
                         frontier.append(node)
                     else:
                         frontier.append(node)
-                        
+    # only returns the path cost, which is needed for precomputations
     path_cost = currentNode.path_cost
     return path_cost
 
@@ -257,11 +255,10 @@ def solution(goalNode, maze, statesExplored):
     currentNode = goalNode
     path = []
     curr_coord = currentNode.state.current
-    objectivesTraveledTo = set([])
+    
     while not (currentNode.parent is None):
         path.append(curr_coord)
-        if(maze.isObjective(curr_coord[0], curr_coord[1])):
-            objectivesTraveledTo.add(curr_coord)
+        
         currentNode = currentNode.parent
         curr_coord = currentNode.state.current
     path.append(curr_coord)
@@ -352,7 +349,8 @@ class State:
 
     def __hash__(self):
         return hash((self.current, self.frozenobjectives))
-
+# code below up to kruskalMST is derived from
+# https://www.geeksforgeeks.org/kruskals-minimum-spanning-tree-algorithm-greedy-algo-2/
 # includes path compressions
 def find(parent, vertex):
     if parent[vertex] == vertex:
@@ -473,3 +471,60 @@ class NodeAstar(NodeGreedy):
         if(self.total_cost == other.total_cost):
             return self.path_cost > other.path_cost
         return self.total_cost < other.total_cost
+
+### code below is for astar extra credit
+
+
+
+def get_next_objective(curr_coord, objectives):
+    priroity_queue = []
+    for objective in objectives:
+        dist = manhattan_distance(curr_coord, objective)
+        priroity_queue.append((dist, objective))
+    priroity_queue.sort(reverse=True)
+    return priroity_queue.pop()[1]
+
+def astarEC(maze):
+    path = []
+    objectives = maze.getObjectives()
+    num_states_explored = 1
+    curr_coord = maze.getStart()
+    path.append(curr_coord)
+
+    while len(objectives) > 0:
+        priroity_queue = []
+        visited = []
+        parent = {}
+        
+        cost = 0
+        objective = get_next_objective(curr_coord,objectives)
+        objectives.remove(objective)
+        distance = manhattan_distance(curr_coord, objective)
+
+        #uses first part of tuple for priority, tuple is (number, tuple) 
+        priroity_queue.append((distance, curr_coord))
+        visited.append(curr_coord)
+        start_coord = curr_coord
+        while (len(priroity_queue) > 0) and not (objective == curr_coord):
+            priroity_queue.sort(reverse=True)
+            curr_coord = priroity_queue.pop()[1]
+
+            for neighbor in maze.getNeighbors(curr_coord[0], curr_coord[1]):
+                if neighbor not in visited:
+                    distance = manhattan_distance(neighbor, objective)
+                    cost = cost + 1
+                    priroity_queue.append((distance + cost, neighbor))
+                    visited.append(neighbor)
+                    num_states_explored = num_states_explored + 1
+                    parent[neighbor] = curr_coord
+
+        #solution function
+        subpath = []
+        while not (curr_coord == start_coord):
+            subpath.append(curr_coord)
+            curr_coord = parent[curr_coord]
+        
+        subpath.reverse()
+        path = path + subpath
+        curr_coord = path[-1]#resets curr_coord
+    return path, num_states_explored
